@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Likecord — Real-Time Social Platform</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg-tertiary: #1e1f22;
+      --bg-secondary: #2b2d31;
+      --bg-secondary-alt: #232428;
+      --bg-primary: #313338;
+      --bg-modifier-hover: #35373c;
+      --bg-modifier-active: #404249;
+      --bg-input: #383a40;
+      --text-normal: #dbdee1;
+      --text-muted: #949ba4;
+      --header-primary: #f2f3f5;
+      --brand: #5865f2;
+      --brand-hover: #4752c4;
+      --green: #23a55a;
+      --yellow: #f0b232;
+      --red: #f23f43;
+      --crystal: #00d2ff;
+      --border-subtle: #3f4147;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Inter, sans-serif; }
+    body { background-color: var(--bg-tertiary); color: var(--text-normal); height: 100vh; overflow: hidden; user-select: none; }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #1a1b1e; border-radius: 4px; }
+
+    #auth-screen {
+      position: fixed; inset: 0; background: radial-gradient(circle at 20% 20%, #3b429f 0%, #1e1f22 65%);
+      display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px;
+    }
+    .auth-card { background: var(--bg-primary); width: 100%; max-width: 440px; padding: 32px; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); }
+    .auth-header { text-align: center; margin-bottom: 24px; }
+    .auth-logo { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 16px; background: var(--brand); color: white; margin-bottom: 12px; }
+    .auth-header h1 { color: var(--header-primary); font-size: 24px; font-weight: 700; }
+    .auth-header p { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; padding: 10px 12px; background: var(--bg-tertiary); border: 1px solid #18191c; border-radius: 4px; color: var(--header-primary); font-size: 15px; outline: none;
+    }
+    .form-group input:focus { border-color: var(--brand); }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; border-radius: 4px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+    .btn-primary { background: var(--brand); color: white; width: 100%; padding: 12px; font-size: 15px; }
+    .btn-primary:hover { background: var(--brand-hover); }
+    .btn-green { background: var(--green); color: white; }
+    .btn-secondary { background: var(--bg-modifier-active); color: var(--header-primary); }
+    .btn-danger { background: var(--red); color: white; }
+
+    .auth-switch { margin-top: 16px; font-size: 13px; color: var(--text-muted); text-align: center; }
+    .auth-switch span { color: #00a8fc; cursor: pointer; font-weight: 500; }
+    .error-msg { color: var(--red); font-size: 13px; margin-bottom: 12px; min-height: 18px; }
+
+    #app-container { display: none; height: 100vh; width: 100vw; grid-template-columns: 72px 240px 1fr 280px; }
+
+    .server-rail { background: var(--bg-tertiary); display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 8px; overflow-y: auto; }
+    .rail-item { position: relative; width: 48px; height: 48px; border-radius: 50%; background: var(--bg-primary); color: var(--text-normal); display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 700; transition: 0.2s; flex-shrink: 0; }
+    .rail-item:hover, .rail-item.active { border-radius: 16px; background: var(--brand); color: white; }
+    .rail-item.action-btn { color: var(--green); }
+    .rail-item.action-btn:hover { background: var(--green); color: white; }
+    .rail-pill { position: absolute; left: -12px; width: 4px; height: 0; background: white; border-radius: 0 4px 4px 0; transition: height 0.2s; }
+    .rail-item:hover .rail-pill { height: 20px; }
+    .rail-item.active .rail-pill { height: 40px; }
+    .rail-divider { width: 32px; height: 2px; background: var(--border-subtle); border-radius: 1px; }
+
+    .sidebar { background: var(--bg-secondary); display: flex; flex-direction: column; height: 100vh; }
+    .sidebar-header { height: 48px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2023; font-weight: 700; color: var(--header-primary); font-size: 15px; }
+    .sidebar-content { flex: 1; overflow-y: auto; padding: 8px; }
+    .nav-btn { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 4px; color: var(--text-muted); cursor: pointer; font-weight: 500; font-size: 15px; margin-bottom: 2px; }
+    .nav-btn:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
+    .nav-btn.active { background: var(--bg-modifier-active); color: var(--header-primary); }
+    .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding: 16px 8px 6px; display: flex; justify-content: space-between; align-items: center; }
+    .dm-item { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 4px; cursor: pointer; color: var(--text-muted); }
+    .dm-item:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
+    .dm-item.active { background: var(--bg-modifier-active); color: var(--header-primary); }
+
+    .user-panel { height: 54px; background: var(--bg-secondary-alt); padding: 0 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .user-panel-info { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 4px; cursor: pointer; flex: 1; min-width: 0; }
+    .user-panel-info:hover { background: var(--bg-modifier-hover); }
+    .user-meta { min-width: 0; flex: 1; }
+    .user-meta .name { font-size: 13px; font-weight: 600; color: var(--header-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-meta .sub { font-size: 11px; color: var(--crystal); font-weight: 600; }
+    .icon-btn { width: 32px; height: 32px; border-radius: 4px; background: transparent; border: none; color: var(--text-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .icon-btn:hover { background: var(--bg-modifier-hover); color: var(--header-primary); }
+
+    .avatar-wrap { position: relative; width: 34px; height: 34px; flex-shrink: 0; }
+    .avatar-wrap.lg { width: 80px; height: 80px; }
+    .avatar-wrap.md { width: 42px; height: 42px; }
+    .avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: var(--brand); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; }
+    .avatar-wrap.lg .avatar-img { font-size: 28px; }
+    .status-dot { position: absolute; bottom: -1px; right: -1px; width: 11px; height: 11px; border-radius: 50%; background: var(--green); border: 2px solid var(--bg-secondary-alt); z-index: 3; }
+
+    .deco-ring { position: absolute; inset: -4px; border-radius: 50%; pointer-events: none; z-index: 2; }
+    .deco-cyber { border: 2px solid #00f0ff; box-shadow: 0 0 10px #00f0ff; animation: spinSlow 6s linear infinite; }
+    .deco-crown { border: 2px solid #ffd700; box-shadow: 0 0 12px rgba(255,215,0,0.85); }
+    .deco-flame { border: 2px dashed #ff5500; box-shadow: 0 0 12px #ff3300; }
+    .deco-galaxy { border: 2px solid #b84dff; box-shadow: 0 0 12px #7b2cbf; }
+    @keyframes spinSlow { 100% { transform: rotate(360deg); } }
+
+    .main-view { background: var(--bg-primary); display: flex; flex-direction: column; height: 100vh; min-width: 0; }
+    .topbar { height: 48px; padding: 0 16px; border-bottom: 1px solid #1f2023; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+    .topbar-left { display: flex; align-items: center; gap: 12px; font-weight: 700; color: var(--header-primary); }
+    .crystal-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,210,255,0.12); border: 1px solid rgba(0,210,255,0.35); color: var(--crystal); padding: 4px 10px; border-radius: 16px; font-size: 13px; font-weight: 700; }
+
+    .view-body { flex: 1; overflow-y: auto; padding: 20px; }
+    .friend-tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px; }
+    .tab-pill { padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-muted); }
+    .tab-pill:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
+    .tab-pill.active { background: var(--bg-modifier-active); color: var(--header-primary); }
+    .tab-pill.add-tab { background: var(--green); color: white; }
+    .friend-row { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-top: 1px solid var(--border-subtle); border-radius: 6px; }
+    .friend-row:hover { background: var(--bg-modifier-hover); }
+
+    .chat-messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; user-select: text; }
+    .msg-item { display: flex; gap: 14px; align-items: flex-start; position: relative; }
+    .msg-item:hover .msg-delete-btn { display: inline-block; }
+    .msg-delete-btn { display: none; position: absolute; right: 10px; top: 2px; background: var(--red); color: white; border: none; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+    .msg-content-wrap { flex: 1; min-width: 0; }
+    .msg-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+    .msg-author { font-weight: 600; color: var(--header-primary); font-size: 15px; }
+    .msg-time { font-size: 11px; color: var(--text-muted); }
+    .msg-text { color: var(--text-normal); font-size: 15px; line-height: 1.4; word-wrap: break-word; }
+
+    .chat-input-box { padding: 0 20px 20px; }
+    .chat-input-form { background: var(--bg-input); border-radius: 8px; padding: 4px 12px; display: flex; align-items: center; gap: 10px; }
+    .chat-input-form input { flex: 1; background: transparent; border: none; color: var(--header-primary); font-size: 15px; padding: 10px 0; outline: none; }
+
+    .shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 16px; }
+    .shop-card { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+    .shop-preview { height: 100px; display: flex; align-items: center; justify-content: center; background: var(--bg-tertiary); }
+    .shop-info { padding: 14px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
+
+    .profile-panel { background: var(--bg-secondary-alt); border-left: 1px solid #1f2023; overflow-y: auto; }
+    .profile-banner { height: 96px; background: linear-gradient(135deg, #5865f2, #eb459e); }
+    .profile-body { padding: 0 16px 20px; position: relative; }
+    .profile-avatar-pos { margin-top: -42px; margin-bottom: 12px; display: inline-block; border-radius: 50%; padding: 4px; background: var(--bg-secondary-alt); }
+    .profile-card-box { background: var(--bg-tertiary); border-radius: 8px; padding: 12px; margin-top: 12px; }
+
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: none; align-items: center; justify-content: center; z-index: 900; padding: 16px; }
+    .modal-box { background: var(--bg-primary); width: 100%; max-width: 460px; border-radius: 8px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; color: var(--header-primary); font-weight: 700; font-size: 18px; }
+
+    .admin-badge { background: var(--red); color: white; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; margin-left: 6px; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- AUTHENTICATION SCREEN -->
+  <div id="auth-screen">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z"/>
+          </svg>
+        </div>
+        <h1 id="auth-title">Welcome back to Likecord</h1>
+        <p id="auth-subtitle">Sign in to connect with friends and servers in real time.</p>
+      </div>
+
+      <div id="auth-error" class="error-msg"></div>
+
+      <form id="auth-form">
+        <div id="register-fields" class="hidden">
+          <div class="form-group">
+            <label>Username (3–20 lowercase letters/numbers)</label>
+            <input type="text" id="reg-username" placeholder="e.g. lyzy" minlength="3" maxlength="20" />
+          </div>
+          <div class="form-group">
+            <label>Display Name</label>
+            <input type="text" id="reg-display" placeholder="How friends see you" maxlength="24" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="auth-email" required placeholder="you@example.com" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="auth-password" required placeholder="••••••••" minlength="6" />
+        </div>
+        <button type="submit" class="btn btn-primary" id="auth-submit-btn">Log In</button>
+      </form>
+      <div class="auth-switch">
+        <span id="toggle-auth-mode">Need an account? Register now</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP CONTAINER -->
+  <div id="app-container">
+    <div class="server-rail" id="server-rail">
+      <div class="rail-item active" id="home-rail-btn" title="Direct Messages & Friends" onclick="switchToHome()">
+        <div class="rail-pill"></div>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z"/></svg>
+      </div>
+      <div class="rail-divider"></div>
+      <div id="joined-servers-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+      <div class="rail-item action-btn" title="Create or Join a Server" onclick="openModal('server-modal')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="sidebar-header" id="sidebar-header-title">Likecord Home</div>
+      <div class="sidebar-content" id="home-sidebar-nav">
+        <div class="nav-btn active" id="nav-friends" onclick="openFriendsView()">Friends</div>
+        <div class="nav-btn" id="nav-shop" onclick="openShopView()">Crystal Shop</div>
+        <!-- Admin Panel Tab (Appears only if user is admin) -->
+        <div class="nav-btn hidden" id="nav-admin" style="color:var(--red);" onclick="openAdminView()">🛡️ Admin Panel</div>
+
+        <div class="section-label">
+          <span>Direct Messages</span>
+          <span style="cursor:pointer; font-size:16px;" onclick="openFriendsView('add')">+</span>
+        </div>
+        <div id="dm-friends-list"></div>
+      </div>
+
+      <div class="sidebar-content hidden" id="server-sidebar-nav">
+        <div class="section-label">Text Channels</div>
+        <div class="nav-btn active"><span style="color:var(--text-muted);">#</span> general</div>
+        <div style="margin-top:20px; padding:10px; background:var(--bg-tertiary); border-radius:6px; font-size:12px;">
+          <div style="color:var(--text-muted); margin-bottom:4px;">Invite Code:</div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <code id="active-server-invite" style="color:var(--crystal); font-weight:700;"></code>
+            <button class="btn btn-secondary" style="padding:3px 8px; font-size:11px;" onclick="copyInviteCode()">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="user-panel">
+        <div class="user-panel-info" onclick="openModal('profile-modal')">
+          <div class="avatar-wrap" id="me-panel-avatar"></div>
+          <div class="user-meta">
+            <div class="name" id="me-panel-name">Loading...</div>
+            <div class="sub" id="me-panel-crystals">💎 0 Crystals</div>
+          </div>
+        </div>
+        <button class="icon-btn" title="Edit Profile" onclick="openModal('profile-modal')">⚙️</button>
+        <button class="icon-btn" title="Log Out" onclick="logoutUser()">🚪</button>
+      </div>
+    </div>
+
+    <div class="main-view">
+      <div class="topbar">
+        <div class="topbar-left" id="topbar-title">Friends</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="btn btn-secondary" style="padding:5px 10px; font-size:12px;" onclick="claimDailyCrystals()">+100 Daily 💎</button>
+          <div class="crystal-badge" id="topbar-crystals">💎 0</div>
+        </div>
+      </div>
+
+      <div id="view-friends" class="view-body">
+        <div class="friend-tabs">
+          <div class="tab-pill active" id="tab-all" onclick="setFriendTab('all')">All Friends</div>
+          <div class="tab-pill" id="tab-pending" onclick="setFriendTab('pending')">Pending</div>
+          <div class="tab-pill add-tab" id="tab-add" onclick="setFriendTab('add')">Add Friend</div>
+        </div>
+        <div id="friends-list-container"></div>
+        <div id="add-friend-container" class="hidden">
+          <h3 style="color:var(--header-primary); margin-bottom:6px;">Find Friends</h3>
+          <input type="text" id="friend-search-input" placeholder="Search exact username..." style="max-width:320px; padding:10px; background:var(--bg-tertiary); border:1px solid #18191c; border-radius:6px; color:white; margin-bottom:16px;" oninput="searchUsers()" />
+          <div id="search-results-container"></div>
+        </div>
+      </div>
+
+      <div id="view-shop" class="view-body hidden">
+        <h2 style="color:var(--header-primary); margin-bottom:4px;">Crystal Shop</h2>
+        <div class="shop-grid" id="shop-items-grid"></div>
+      </div>
+
+      <!-- ADMIN PANEL VIEW -->
+      <div id="view-admin" class="view-body hidden">
+        <h2 style="color:var(--red); margin-bottom:12px;">🛡️ Administrator Moderation Panel</h2>
+        <p style="color:var(--text-muted); font-size:14px; margin-bottom:20px;">Manage registered users and system data.</p>
+        <div id="admin-users-list"></div>
+      </div>
+
+      <div id="view-chat" class="hidden" style="display:flex; flex-direction:column; flex:1; min-height:0;">
+        <div class="chat-messages" id="chat-messages-list"></div>
+        <div class="chat-input-box">
+          <form class="chat-input-form" id="chat-send-form">
+            <input type="text" id="chat-message-input" placeholder="Send a message..." autocomplete="off" required />
+            <button type="submit" class="btn btn-primary" style="width:auto; padding:8px 16px;">Send</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-panel" id="right-profile-panel">
+      <div class="profile-banner" id="right-banner"></div>
+      <div class="profile-body">
+        <div class="profile-avatar-pos">
+          <div class="avatar-wrap lg" id="right-avatar"></div>
+        </div>
+        <h3 style="color:var(--header-primary); font-size:19px;" id="right-display-name">User</h3>
+        <div style="color:var(--text-muted); font-size:13px;" id="right-username">@username</div>
+        <div class="profile-card-box">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">About Me</div>
+          <div style="font-size:13px;" id="right-bio">Hello!</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE MODAL -->
+  <div class="modal-backdrop" id="profile-modal">
+    <div class="modal-box">
+      <div class="modal-header"><span>Edit Profile</span><button class="icon-btn" onclick="closeModal('profile-modal')">✕</button></div>
+      <form id="profile-edit-form">
+        <div class="form-group"><label>Avatar Image</label><input type="file" id="avatar-file-input" accept="image/*" /></div>
+        <div class="form-group"><label>Display Name</label><input type="text" id="edit-display-name" required /></div>
+        <div class="form-group"><label>Bio</label><textarea id="edit-bio" rows="3"></textarea></div>
+        <div class="form-group"><label>Decoration</label><select id="edit-decoration"></select></div>
+        <div class="form-group"><label>Banner</label><select id="edit-banner"></select></div>
+        <button type="submit" class="btn btn-primary" style="margin-top:10px;">Save</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- SERVER MODAL -->
+  <div class="modal-backdrop" id="server-modal">
+    <div class="modal-box">
+      <div class="modal-header"><span>Create / Join Server</span><button class="icon-btn" onclick="closeModal('server-modal')">✕</button></div>
+      <div class="form-group"><label>Create Server</label><input type="text" id="new-server-name" placeholder="Server Name" /><button class="btn btn-primary" style="margin-top:8px;" onclick="createServer()">Create</button></div>
+      <hr style="border:none; border-top:1px solid var(--border-subtle); margin:16px 0;" />
+      <div class="form-group"><label>Join with Code</label><input type="text" id="join-invite-code" placeholder="Invite Code" /><button class="btn btn-green" style="margin-top:8px;" onclick="joinServerByCode()">Join</button></div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // CONFIGURE YOUR SUPABASE KEYS HERE
+    // =========================================================================
+    const SUPABASE_URL = "https://lnxgteyjxkagzupifugs.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_KF_E21wPkSTHUC8X9xv__Q_s36quMkb";
+
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const SHOP_ITEMS = [
+      { id: "deco_cyber", type: "decoration", name: "Cyber Neon Ring", price: 250, cssClass: "deco-cyber" },
+      { id: "deco_crown", type: "decoration", name: "Golden Sovereign Halo", price: 400, cssClass: "deco-crown" },
+      { id: "deco_flame", type: "decoration", name: "Inferno Aura", price: 350, cssClass: "deco-flame" },
+      { id: "deco_galaxy", type: "decoration", name: "Nebula Orbit", price: 500, cssClass: "deco-galaxy" },
+      { id: "banner_sunset", type: "banner", name: "Synthwave Sunset", price: 200, gradient: "linear-gradient(135deg, #ff512f, #dd2476)" },
+      { id: "banner_emerald", type: "banner", name: "Emerald Matrix", price: 200, gradient: "linear-gradient(135deg, #11998e, #38ef7d)" }
+    ];
+
+    let currentUser = null, currentProfile = null, isRegisterMode = false, activeChatTarget = null, friendTab = "all", friendsCache = [], realtimeChannel = null;
+
+    document.getElementById("toggle-auth-mode").addEventListener("click", () => {
+      isRegisterMode = !isRegisterMode;
+      document.getElementById("register-fields").classList.toggle("hidden", !isRegisterMode);
+      document.getElementById("auth-title").textContent = isRegisterMode ? "Create Account" : "Welcome back";
+      document.getElementById("auth-submit-btn").textContent = isRegisterMode ? "Register" : "Log In";
+      document.getElementById("toggle-auth-mode").textContent = isRegisterMode ? "Already have an account? Log In" : "Need an account? Register";
+    });
+
+    document.getElementById("auth-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById("auth-error");
+      errEl.textContent = "";
+      const email = document.getElementById("auth-email").value.trim();
+      const password = document.getElementById("auth-password").value;
+
+      if (isRegisterMode) {
+        const username = document.getElementById("reg-username").value.trim().toLowerCase();
+        const display = document.getElementById("reg-display").value.trim() || username;
+        if (!/^[a-z0-9_]{3,20}$/.test(username)) { errEl.textContent = "Username must be 3-20 alphanumeric characters."; return; }
+
+        const { data, error } = await sb.auth.signUp({ email, password });
+        if (error) { errEl.textContent = error.message; return; }
+        if (data.user) {
+          await sb.from("profiles").insert({ id: data.user.id, username, display_name: display, crystals: 500 });
+          await bootApp(data.user);
+        }
+      } else {
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) { errEl.textContent = error.message; return; }
+        await bootApp(data.user);
+      }
+    });
+
+    async function logoutUser() { await sb.auth.signOut(); location.reload(); }
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      if (SUPABASE_URL === "YOUR_SUPABASE_URL") return;
+      const { data: { session } } = await sb.auth.getSession();
+      if (session?.user) await bootApp(session.user);
+    });
+
+    async function bootApp(user) {
+      currentUser = user;
+      await loadMyProfile();
+      document.getElementById("auth-screen").style.display = "none";
+      document.getElementById("app-container").style.display = "grid";
+
+      if (currentProfile?.is_admin) {
+        document.getElementById("nav-admin").classList.remove("hidden");
+      }
+
+      await Promise.all([loadFriends(), loadServers()]);
+      renderShop();
+      setupRealtime();
+      openFriendsView();
+    }
+
+    async function loadMyProfile() {
+      const { data } = await sb.from("profiles").select("*").eq("id", currentUser.id).single();
+      currentProfile = data;
+      updateUserUI();
+    }
+
+    function renderAvatarHTML(profile, sizeClass = "") {
+      const initials = (profile?.display_name || "U").slice(0, 2).toUpperCase();
+      const deco = SHOP_ITEMS.find(i => i.id === profile?.decoration);
+      return `<div class="avatar-wrap ${sizeClass}">${profile?.avatar_url ? `<img class="avatar-img" src="${profile.avatar_url}"/>` : `<div class="avatar-img">${initials}</div>`}${deco ? `<div class="deco-ring ${deco.cssClass}"></div>` : ""}<div class="status-dot"></div></div>`;
+    }
+
+    function updateUserUI() {
+      if (!currentProfile) return;
+      document.getElementById("me-panel-avatar").innerHTML = renderAvatarHTML(currentProfile);
+      document.getElementById("me-panel-name").innerHTML = currentProfile.display_name + (currentProfile.is_admin ? `<span class="admin-badge">Admin</span>` : "");
+      document.getElementById("me-panel-crystals").textContent = `💎 ${currentProfile.crystals} Crystals`;
+      document.getElementById("topbar-crystals").textContent = `💎 ${currentProfile.crystals}`;
+    }
+
+    function renderRightProfile(prof) {
+      document.getElementById("right-banner").style.background = prof.banner_color || "linear-gradient(135deg, #5865F2, #EB459E)";
+      document.getElementById("right-avatar").innerHTML = renderAvatarHTML(prof, "lg");
+      document.getElementById("right-display-name").textContent = prof.display_name;
+      document.getElementById("right-username").textContent = `@${prof.username}`;
+      document.getElementById("right-bio").textContent = prof.bio || "No bio.";
+    }
+
+    // FRIENDS & SERVERS LOGIC
+    async function loadFriends() {
+      const { data } = await sb.from("friendships").select(`id, status, user_id, friend_id, sender:profiles!friendships_user_id_fkey(*), receiver:profiles!friendships_friend_id_fkey(*)`).or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`);
+      friendsCache = data || [];
+      renderSidebarDMs();
+      renderFriendsList();
+    }
+
+    function renderSidebarDMs() {
+      const container = document.getElementById("dm-friends-list");
+      const accepted = friendsCache.filter(f => f.status === "accepted");
+      container.innerHTML = accepted.map(f => {
+        const friend = f.user_id === currentUser.id ? f.receiver : f.sender;
+        return `<div class="dm-item" onclick='openDMChat(${JSON.stringify(friend)})'>${renderAvatarHTML(friend)}<span>${friend.display_name}</span></div>`;
+      }).join("");
+    }
+
+    function setFriendTab(tab) {
+      friendTab = tab;
+      ["all", "pending", "add"].forEach(t => document.getElementById(`tab-${t}`).classList.toggle("active", t === tab && t !== "add"));
+      document.getElementById("friends-list-container").classList.toggle("hidden", tab === "add");
+      document.getElementById("add-friend-container").classList.toggle("hidden", tab !== "add");
+      if (tab !== "add") renderFriendsList();
+    }
+
+    function renderFriendsList() {
+      const container = document.getElementById("friends-list-container");
+      const accepted = friendsCache.filter(f => f.status === "accepted");
+      container.innerHTML = accepted.map(f => {
+        const friend = f.user_id === currentUser.id ? f.receiver : f.sender;
+        return `<div class="friend-row"><div style="display:flex; gap:10px; align-items:center;">${renderAvatarHTML(friend, "md")}<span>${friend.display_name}</span></div><button class="btn btn-secondary" onclick='openDMChat(${JSON.stringify(friend)})'>Message</button></div>`;
+      }).join("");
+    }
+
+    async function searchUsers() {
+      const q = document.getElementById("friend-search-input").value.trim().toLowerCase();
+      const res = document.getElementById("search-results-container");
+      if (q.length < 2) return;
+      const { data } = await sb.from("profiles").select("*").ilike("username", `%${q}%`).neq("id", currentUser.id).limit(5);
+      res.innerHTML = (data || []).map(u => `<div class="friend-row"><span>@${u.username}</span><button class="btn btn-primary" style="width:auto;" onclick="sendRequest('${u.id}')">Add</button></div>`).join("");
+    }
+
+    async function sendRequest(id) { await sb.from("friendships").insert({ user_id: currentUser.id, friend_id: id, status: "pending" }); loadFriends(); }
+
+    async function loadServers() {
+      const { data } = await sb.from("server_members").select("server_id, servers(*)").eq("user_id", currentUser.id);
+      document.getElementById("joined-servers-list").innerHTML = (data || []).map(row => `<div class="rail-item" onclick='openServerChat(${JSON.stringify(row.servers)})'>${row.servers.name.slice(0,2)}</div>`).join("");
+    }
+
+    async function createServer() {
+      const name = document.getElementById("new-server-name").value.trim();
+      if (!name) return;
+      const code = Math.random().toString(36).substring(2,8).toUpperCase();
+      const { data } = await sb.from("servers").insert({ name, owner_id: currentUser.id, invite_code: code }).select().single();
+      await sb.from("server_members").insert({ server_id: data.id, user_id: currentUser.id });
+      closeModal("server-modal"); loadServers(); openServerChat(data);
+    }
+
+    function hideAllViews() {
+      ["view-friends", "view-shop", "view-admin", "view-chat"].forEach(id => document.getElementById(id).classList.add("hidden"));
+      ["nav-friends", "nav-shop"].forEach(id => document.getElementById(id).classList.remove("active"));
+    }
+
+    function switchToHome() { activeChatTarget = null; hideAllViews(); document.getElementById("view-friends").classList.remove("hidden"); }
+    function openFriendsView(t="all") { hideAllViews(); document.getElementById("view-friends").classList.remove("hidden"); setFriendTab(t); }
+    function openShopView() { hideAllViews(); document.getElementById("view-shop").classList.remove("hidden"); renderShop(); }
+    
+    // ADMIN PANEL VIEW FUNCTION
+    async function openAdminView() {
+      if (!currentProfile?.is_admin) return;
+      hideAllViews();
+      document.getElementById("view-admin").classList.remove("hidden");
+      const { data } = await sb.from("profiles").select("*");
+      document.getElementById("admin-users-list").innerHTML = (data || []).map(u => `
+        <div class="friend-row">
+          <div><b>${u.display_name}</b> (@${u.username}) ${u.is_admin ? '<span class="admin-badge">Admin</span>' : ''}</div>
+          <div>💎 ${u.crystals} Crystals</div>
+        </div>
+      `).join("");
+    }
+
+    async function openDMChat(prof) {
+      activeChatTarget = { type: "dm", id: prof.id };
+      hideAllViews(); document.getElementById("view-chat").classList.remove("hidden");
+      renderRightProfile(prof); await loadMessages();
+    }
+
+    async function openServerChat(srv) {
+      activeChatTarget = { type: "server", id: srv.id };
+      hideAllViews(); document.getElementById("view-chat").classList.remove("hidden");
+      await loadMessages();
+    }
+
+    async function loadMessages() {
+      const list = document.getElementById("chat-messages-list");
+      let query = sb.from("messages").select("*, sender:profiles!messages_sender_id_fkey(*)").order("created_at", { ascending: true }).limit(50);
+      if (activeChatTarget.type === "dm") query = query.or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${activeChatTarget.id}),and(sender_id.eq.${activeChatTarget.id},receiver_id.eq.${currentUser.id})`);
+      else query = query.eq("server_id", activeChatTarget.id);
+
+      const { data } = await query;
+      list.innerHTML = (data || []).map(m => `
+        <div class="msg-item">
+          ${renderAvatarHTML(m.sender, "md")}
+          <div class="msg-content-wrap">
+            <div class="msg-header"><span class="msg-author">${m.sender?.display_name}</span></div>
+            <div class="msg-text">${m.content}</div>
+          </div>
+          ${(currentProfile?.is_admin || m.sender_id === currentUser.id) ? `<button class="msg-delete-btn" onclick="deleteMessage('${m.id}')">Delete</button>` : ""}
+        </div>
+      `).join("");
+      list.scrollTop = list.scrollHeight;
+    }
+
+    async function deleteMessage(id) {
+      await sb.from("messages").delete().eq("id", id);
+      loadMessages();
+    }
+
+    document.getElementById("chat-send-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("chat-message-input");
+      const content = input.value.trim();
+      if (!content) return;
+      input.value = "";
+      await sb.from("messages").insert({ sender_id: currentUser.id, content, receiver_id: activeChatTarget.type === "dm" ? activeChatTarget.id : null, server_id: activeChatTarget.type === "server" ? activeChatTarget.id : null });
+      loadMessages();
+    });
+
+    function setupRealtime() {
+      sb.channel("realtime").on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, () => loadMessages()).subscribe();
+    }
+
+    function renderShop() {
+      document.getElementById("shop-items-grid").innerHTML = SHOP_ITEMS.map(i => `
+        <div class="shop-card">
+          <div class="shop-preview" style="${i.gradient ? `background:${i.gradient}` : ''}"></div>
+          <div class="shop-info"><b>${i.name}</b><button class="btn btn-primary" onclick="buyItem('${i.id}', ${i.price})">Buy 💎 ${i.price}</button></div>
+        </div>
+      `).join("");
+    }
+
+    async function buyItem(id, price) {
+      if (currentProfile.crystals < price) { alert("Not enough crystals!"); return; }
+      await sb.from("profiles").update({ crystals: currentProfile.crystals - price, owned_items: [...currentProfile.owned_items, id] }).eq("id", currentUser.id);
+      loadMyProfile(); renderShop();
+    }
+
+    function openModal(id) { document.getElementById(id).style.display = "flex"; }
+    function closeModal(id) { document.getElementById(id).style.display = "none"; }
+  </script>
+</body>
+</html>
